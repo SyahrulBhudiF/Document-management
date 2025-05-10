@@ -9,7 +9,9 @@ import {
   UserJwtPayload,
 } from '../../../infrastructure/auth/service/auth.service';
 import {
+  RefreshTokenResponse,
   SignInDto,
+  SignInResponse,
   SignUpDto,
   toUserResponse,
   UserResponse,
@@ -19,7 +21,6 @@ import { usersTable } from '../../../config/db/schema';
 import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
-import { User } from '../../../config/db/schema';
 import { WinstonLogger } from '../../../infrastructure/logger/logger.service';
 
 @Injectable()
@@ -30,9 +31,7 @@ export class UserService {
     private readonly logger: WinstonLogger,
   ) {}
 
-  async signUp(
-    signUpDto: SignUpDto,
-  ): Promise<Pick<User, 'id' | 'email' | 'name'>> {
+  async signUp(signUpDto: SignUpDto): Promise<Partial<UserResponse>> {
     const existingUser = await this.db.dbConfig.query.usersTable.findFirst({
       where: eq(usersTable.email, signUpDto.email),
     });
@@ -77,9 +76,7 @@ export class UserService {
     return newUserArr[0];
   }
 
-  async signIn(
-    signInDto: SignInDto,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
+  async signIn(signInDto: SignInDto): Promise<SignInResponse> {
     const user = await this.db.dbConfig.query.usersTable.findFirst({
       where: eq(usersTable.email, signInDto.email),
     });
@@ -97,6 +94,14 @@ export class UserService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    await this.db.dbConfig
+      .update(usersTable)
+      .set({
+        loginAt: new Date(),
+        updatedAt: new Date().toDateString(),
+      })
+      .where(eq(usersTable.id, user.id));
+
     const userPayload: UserJwtPayload = {
       sub: user.id,
       name: user.name,
@@ -104,9 +109,10 @@ export class UserService {
       jti: uuidv4(),
     };
 
-    const accessToken = await this.authService.generateAccessToken(userPayload);
-    const refreshToken =
-      await this.authService.generateRefreshToken(userPayload);
+    const [accessToken, refreshToken] = await Promise.all([
+      this.authService.generateAccessToken(userPayload),
+      this.authService.generateRefreshToken(userPayload),
+    ]);
 
     this.logger.log(`User ${signInDto.email} logged in`, 'UserService');
 
@@ -115,7 +121,7 @@ export class UserService {
 
   async refreshToken(
     userFromJwt: UserJwtPayload,
-  ): Promise<{ accessToken: string }> {
+  ): Promise<RefreshTokenResponse> {
     const userExists = await this.db.dbConfig.query.usersTable.findFirst({
       where: eq(usersTable.id, userFromJwt.sub),
     });
@@ -146,6 +152,20 @@ export class UserService {
   async logout(user: UserJwtPayload): Promise<void> {
     if (user.jti) {
       this.logger.log(`User ${user.sub} logged out`, 'UserService');
+
+      const userExists = await this.db.dbConfig.query.usersTable.findFirst({
+        where: eq(usersTable.id, user.sub),
+      });
+
+      if (!userExists) {
+        this.logger.error(
+          `User with ID ${user.sub} not found for logout`,
+          new UnauthorizedException('User not found for logout').stack,
+          'UserService',
+        );
+        throw new UnauthorizedException('User not found for logout');
+      }
+
       await this.authService.blacklistTokenFromPayload(user);
     } else {
       this.logger.error(

@@ -64,6 +64,15 @@ export type UserResponse = {
   emailVerified?: Date | null;
 };
 
+export type SignInResponse = {
+  accessToken: string;
+  refreshToken: string;
+};
+
+export type RefreshTokenResponse = {
+  accessToken: string;
+};
+
 export const toUserResponse = (user: Partial<User>): UserResponse => {
   return {
     id: user.id!,
