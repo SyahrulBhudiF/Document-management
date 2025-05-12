@@ -11,20 +11,27 @@ export class WinstonLogger implements LoggerService {
       format: winston.format.combine(
         winston.format.timestamp(),
         winston.format.errors({ stack: true }),
-        winston.format.printf(({ level, message, timestamp, stack }) => {
-          const timestampStr =
-            typeof timestamp === 'string' ? timestamp : String(timestamp);
-
+        winston.format.printf((info) => {
+          const { level, message, timestamp, stack, context } = info;
+          const timestampStr = new Date(timestamp as string).toISOString();
           const messageStr =
             typeof message === 'string' ? message : JSON.stringify(message);
-          const stackStr =
-            typeof stack === 'string'
-              ? stack
-              : stack
-                ? JSON.stringify(stack)
-                : 'No stack';
 
-          return `[${timestampStr}] ${level}: ${stackStr || messageStr || 'No message'}`;
+          let stackStr = '';
+          if (stack) {
+            stackStr =
+              typeof stack === 'string' ? stack : JSON.stringify(stack);
+          }
+
+          const contextStr =
+            typeof context === 'string'
+              ? `[${context}] `
+              : context
+                ? `[${JSON.stringify(context)}] `
+                : '';
+          const outputMessage = stack ? stackStr : messageStr || 'No message';
+
+          return `[${timestampStr}] ${contextStr}${level}: ${outputMessage}`;
         }),
       ),
       transports: [
@@ -32,12 +39,18 @@ export class WinstonLogger implements LoggerService {
           format: winston.format.combine(
             winston.format.colorize(),
             winston.format.timestamp(),
-            winston.format.printf(({ level, message, timestamp }) => {
-              const timestampStr =
-                typeof timestamp === 'string' ? timestamp : String(timestamp);
+            winston.format.printf((info) => {
+              const { level, message, timestamp, context } = info;
+              const timestampStr = new Date(timestamp as string).toISOString();
               const messageStr =
                 typeof message === 'string' ? message : JSON.stringify(message);
-              return `[${timestampStr}] ${level}: ${messageStr || 'No message'}`;
+              const contextStr =
+                typeof context === 'string'
+                  ? `[${context}] `
+                  : context
+                    ? `[${JSON.stringify(context)}] `
+                    : '';
+              return `[${timestampStr}] ${contextStr}${level}: ${messageStr || 'No message'}`;
             }),
           ),
         }),
@@ -57,7 +70,9 @@ export class WinstonLogger implements LoggerService {
   }
 
   error(message: string, trace?: string, context?: string) {
-    this.logger.error(message, { trace, context });
+    const error = new Error(message);
+    if (trace) error.stack = trace;
+    this.logger.error(message, { error, context });
   }
 
   warn(message: string, context?: string) {
@@ -65,10 +80,10 @@ export class WinstonLogger implements LoggerService {
   }
 
   debug(message: string, context?: string) {
-    this.logger.debug?.(message, { context });
+    this.logger.debug(message, { context });
   }
 
   verbose(message: string, context?: string) {
-    this.logger.verbose?.(message, { context });
+    this.logger.verbose(message, { context });
   }
 }

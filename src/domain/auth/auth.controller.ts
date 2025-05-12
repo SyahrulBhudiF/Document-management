@@ -7,17 +7,21 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { UserService } from './service/user.service';
+import { AuthService } from './service/auth.service';
 import {
   SignUpDto,
   SignUpSchema,
   SignInDto,
   SignInSchema,
-} from './dto/user.dto';
+  SendEmailSchema,
+  SendEmailDto,
+  VerifyOtpSchema,
+  VerifyOtpDto,
+} from './dto/auth.dto';
 import { ZodValidationPipe } from '../../common/pipe/zod.pipe';
-import { AccessTokenGuard } from '../../infrastructure/auth/guard/access-token.guard';
-import { RefreshTokenGuard } from '../../infrastructure/auth/guard/refresh-token.guard';
-import { UserJwtPayload } from '../../infrastructure/auth/service/auth.service';
+import { AccessTokenGuard } from '../../infrastructure/jwt/guard/access-token.guard';
+import { RefreshTokenGuard } from '../../infrastructure/jwt/guard/refresh-token.guard';
+import { UserJwtPayload } from '../../infrastructure/jwt/service/jwt.service';
 import { GetCurrentUser } from '../../common/decorator/custom.decorator';
 import {
   ApiBearerAuth,
@@ -29,8 +33,8 @@ import {
 
 @ApiTags('Authentication')
 @Controller('auth')
-export class UserController {
-  constructor(private readonly userService: UserService) {}
+export class AuthController {
+  constructor(private readonly userService: AuthService) {}
 
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
@@ -81,6 +85,10 @@ export class UserController {
   @ApiResponse({
     status: HttpStatus.UNAUTHORIZED,
     description: 'Invalid credentials',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Email not verified',
   })
   @ApiBody({
     schema: {
@@ -178,6 +186,79 @@ export class UserController {
     return {
       message: 'Token refreshed successfully',
       data: result,
+    };
+  }
+
+  @Post('send-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send OTP to email' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OTP sent successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'OTP already sent',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', format: 'email' },
+        retry: { type: 'boolean' },
+      },
+      example: {
+        email: 'john@gmail.com',
+        retry: false,
+      },
+      required: ['email'],
+    },
+  })
+  async sendOtpEmail(
+    @Body(new ZodValidationPipe(SendEmailSchema)) data: SendEmailDto,
+  ) {
+    const result = await this.userService.sendOtpEmail(data.email, data.retry);
+    return {
+      message: 'OTP sent successfully',
+      data: result,
+    };
+  }
+
+  @Post('verify-otp')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify OTP' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'OTP verified successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'OTP not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid OTP',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', format: 'email' },
+        otp: { type: 'string' },
+      },
+      example: {
+        email: 'john@gmail.com',
+        otp: '123456',
+      },
+      required: ['email', 'otp'],
+    },
+  })
+  async verifyOtp(
+    @Body(new ZodValidationPipe(VerifyOtpSchema)) data: VerifyOtpDto,
+  ) {
+    await this.userService.verifyOtp(data.email, data.otp);
+    return {
+      message: 'OTP verified successfully',
     };
   }
 

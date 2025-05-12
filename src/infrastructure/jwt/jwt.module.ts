@@ -1,22 +1,22 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule as JWT } from '@nestjs/jwt';
 import { AccessTokenStrategy } from './strategy/access-token.strategy';
 import { RefreshTokenStrategy } from './strategy/refresh-token.strategy';
 import { AccessTokenGuard } from './guard/access-token.guard';
 import { RefreshTokenGuard } from './guard/refresh-token.guard';
-import { AuthService } from './service/auth.service';
+import { JwtService } from './service/jwt.service';
 import { LoggerModule } from '../logger/logger.module';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({}), LoggerModule],
+  imports: [PassportModule, JWT.register({}), LoggerModule],
   providers: [
-    AuthService,
+    JwtService,
     AccessTokenStrategy,
     RefreshTokenStrategy,
     AccessTokenGuard,
     RefreshTokenGuard,
   ],
-  exports: [AuthService, AccessTokenGuard, RefreshTokenGuard, JwtModule],
+  exports: [JwtService, AccessTokenGuard, RefreshTokenGuard, JwtModule],
 })
-export class AuthModule {}
+export class JwtModule {}

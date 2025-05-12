@@ -1,14 +1,7 @@
 import { z } from 'zod';
 import { User } from '../../../config/db/schema';
 
-interface SignUpDtoProperties {
-  name: string;
-  email: string;
-  password: string;
-  password_confirmation: string;
-}
-
-export const SignUpSchema: z.ZodType<SignUpDtoProperties> = z
+export const SignUpSchema = z
   .object({
     name: z.string().min(1, 'Name is required'),
     email: z.string().email('Invalid email address'),
@@ -42,17 +35,26 @@ export const SignUpSchema: z.ZodType<SignUpDtoProperties> = z
 
 export type SignUpDto = z.infer<typeof SignUpSchema>;
 
-interface SignInDtoProperties {
-  email: string;
-  password: string;
-}
-
-export const SignInSchema: z.ZodType<SignInDtoProperties> = z.object({
+export const SignInSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(1, 'Password is required'),
 });
 
 export type SignInDto = z.infer<typeof SignInSchema>;
+
+export const SendEmailSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  retry: z.boolean().optional(),
+});
+
+export type SendEmailDto = z.infer<typeof SendEmailSchema>;
+
+export const VerifyOtpSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  otp: z.string().min(1, 'OTP is required'),
+});
+
+export type VerifyOtpDto = z.infer<typeof VerifyOtpSchema>;
 
 export type UserResponse = {
   id: string;

@@ -5,10 +5,7 @@ import {
   NotFoundException,
   Inject,
 } from '@nestjs/common';
-import {
-  AuthService,
-  UserJwtPayload,
-} from '../../../infrastructure/auth/service/auth.service';
+import { UserJwtPayload } from '../../../infrastructure/jwt/service/jwt.service';
 import {
   RefreshTokenResponse,
   SignInDto,
@@ -16,7 +13,7 @@ import {
   SignUpDto,
   toUserResponse,
   UserResponse,
-} from '../dto/user.dto';
+} from '../dto/auth.dto';
 import { DatabaseService } from '../../../infrastructure/database/database.service';
 import { User, usersTable } from '../../../config/db/schema';
 import { eq } from 'drizzle-orm';
@@ -25,11 +22,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { WinstonLogger } from '../../../infrastructure/logger/logger.service';
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { envConfig } from '../../../config/env.config';
+import { MailService } from '../../../infrastructure/mail/mail.service';
+import { JwtService } from '../../../infrastructure/jwt/service/jwt.service';
 
 @Injectable()
-export class UserService {
+export class AuthService {
   constructor(
-    private readonly authService: AuthService,
+    private readonly jwtService: JwtService,
+    private readonly emailService: MailService,
     private readonly db: DatabaseService,
     private readonly logger: WinstonLogger,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
@@ -108,6 +108,15 @@ export class UserService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.emailVerified) {
+      this.logger.error(
+        `User ${signInDto.email} email not verified`,
+        new UnauthorizedException('Email not verified').stack,
+        'UserService',
+      );
+      throw new UnauthorizedException('Email not verified');
+    }
+
     await this.db.dbConfig
       .update(usersTable)
       .set({
@@ -123,12 +132,12 @@ export class UserService {
     };
 
     const [accessToken, refreshToken] = await Promise.all([
-      this.authService.generateAccessToken(userPayload),
-      this.authService.generateRefreshToken(userPayload),
+      this.jwtService.generateAccessToken(userPayload),
+      this.jwtService.generateRefreshToken(userPayload),
       this.cacheManager.set(
         userPayload.sub,
         JSON.stringify(user),
-        envConfig.ACCESS_TOKEN_EXPIRES_IN * 60 * 60,
+        envConfig.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 1000,
       ),
     ]);
 
@@ -164,7 +173,7 @@ export class UserService {
       email: userFromJwt.email,
     };
 
-    const accessToken = await this.authService.generateAccessToken(userPayload);
+    const accessToken = await this.jwtService.generateAccessToken(userPayload);
 
     this.logger.log(`User ${userFromJwt.email} refreshed token`, 'UserService');
 
@@ -199,7 +208,7 @@ export class UserService {
         throw new UnauthorizedException('User not found for logout');
       }
 
-      await this.authService.blacklistTokenFromPayload(user);
+      await this.jwtService.blacklistTokenFromPayload(user);
       await this.cacheManager.del(user.sub);
     } else {
       this.logger.error(
@@ -212,14 +221,97 @@ export class UserService {
   }
 
   /**
+   * Sends an OTP email to the user.
+   *
+   * @param email
+   * @param retry
+   */
+  async sendOtpEmail(email: string, retry?: boolean): Promise<void> {
+    let otp = (await this.cacheManager.get(email)) as string;
+
+    if (otp && !retry) {
+      this.logger.error(
+        `OTP already sent to ${email}`,
+        new ConflictException('OTP already sent').stack,
+        'UserService',
+      );
+      throw new ConflictException('OTP already sent');
+    }
+
+    const attempt = (await this.cacheManager.get(`${email}_attempt`)) as number;
+
+    if (attempt && attempt > 3) {
+      this.logger.error(
+        'Too many attempts send otp',
+        new ConflictException('Too many attempts').stack,
+        'UserService',
+      );
+      throw new ConflictException('Too many attempts');
+    }
+
+    otp = await this.emailService.sendOtpEmail(email);
+    this.logger.log(`OTP sent to ${email}`, 'UserService');
+
+    await Promise.all([
+      this.cacheManager.set(email, otp, 5 * 60 * 1000),
+      this.cacheManager.set(
+        `${email}_attempt`,
+        attempt ? attempt + 1 : 1,
+        5 * 60 * 1000,
+      ),
+    ]);
+  }
+
+  /**
+   * Verifies the OTP sent to the user's email.
+   *
+   * @param email
+   * @param otp
+   */
+  async verifyOtp(email: string, otp: string): Promise<void> {
+    const cachedOtp = (await this.cacheManager.get(email)) as string;
+
+    if (!cachedOtp) {
+      this.logger.error(
+        `OTP not found for ${email}`,
+        new NotFoundException('OTP not found').stack,
+        'UserService',
+      );
+      throw new NotFoundException('OTP not found');
+    }
+
+    if (cachedOtp !== otp) {
+      this.logger.error(
+        `Invalid OTP for ${email}`,
+        new UnauthorizedException('Invalid OTP').stack,
+        'UserService',
+      );
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    await Promise.all([
+      this.cacheManager.del(email),
+      this.db.dbConfig
+        .update(usersTable)
+        .set({
+          emailVerified: new Date(),
+          updatedAt: new Date().toDateString(),
+        })
+        .where(eq(usersTable.email, email)),
+    ]);
+
+    this.logger.log(`OTP verified for ${email}`, 'UserService');
+  }
+
+  /**
    * Retrieves the profile of a user by their ID.
    *
    * @param userId
    */
   async getUserProfile(userId: string): Promise<UserResponse> {
-    let user = (await this.cacheManager.get(userId)) as
-      | Partial<User>
-      | undefined;
+    let user: string | Partial<User> | undefined = (await this.cacheManager.get(
+      userId,
+    )) as string;
 
     if (!user) {
       user = await this.db.dbConfig.query.usersTable.findFirst({
@@ -234,6 +326,8 @@ export class UserService {
           emailVerified: true,
         },
       });
+    } else {
+      user = JSON.parse(user) as Partial<User>;
     }
 
     if (!user) {

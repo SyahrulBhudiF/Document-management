@@ -9,6 +9,8 @@ import { Exception } from '../common/filter/exception.filter';
 export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.setGlobalPrefix('api');
+
   const logger = app.get(WinstonLogger);
   app.useLogger(logger);
 

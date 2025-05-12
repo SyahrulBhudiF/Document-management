@@ -3,7 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { envConfig } from '../../../config/env.config';
-import { AuthService, UserJwtPayload } from '../service/auth.service';
+import { JwtService, UserJwtPayload } from '../service/jwt.service';
 import { UnauthorizedException } from '@nestjs/common';
 
 interface RequestWithRefreshTokenBody extends Request {
@@ -17,7 +17,7 @@ export class RefreshTokenStrategy extends PassportStrategy(
   Strategy,
   'jwt-refresh',
 ) {
-  constructor(private readonly authService: AuthService) {
+  constructor(private readonly jwt: JwtService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (req: RequestWithRefreshTokenBody) => req.body?.refresh_token ?? null,
@@ -46,7 +46,7 @@ export class RefreshTokenStrategy extends PassportStrategy(
     }
 
     const cacheKey = `bl_${payload.sub}_${payload.jti}`;
-    const isBlacklisted = await this.authService['cacheManager'].get(cacheKey);
+    const isBlacklisted = await this.jwt['cacheManager'].get(cacheKey);
 
     if (isBlacklisted) {
       throw new UnauthorizedException('Refresh token has been blacklisted.');

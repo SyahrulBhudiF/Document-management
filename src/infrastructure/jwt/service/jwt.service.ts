@@ -1,6 +1,6 @@
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { Inject, Injectable } from '@nestjs/common';
+import { JwtService as JWT } from '@nestjs/jwt';
 import { envConfig } from '../../../config/env.config';
 import { v4 as uuidv4 } from 'uuid';
 import { WinstonLogger } from '../../logger/logger.service';
@@ -13,9 +13,9 @@ export interface UserJwtPayload {
 }
 
 @Injectable()
-export class AuthService {
+export class JwtService {
   constructor(
-    private readonly jwtService: JwtService,
+    private readonly jwtService: JWT,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
     private readonly logger: WinstonLogger,
   ) {}
