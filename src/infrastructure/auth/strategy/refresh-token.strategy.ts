@@ -3,7 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { envConfig } from '../../../config/env.config';
-import { AuthService, UserJwtPayload } from '../service/auth.service'; // Added AuthService
+import { AuthService, UserJwtPayload } from '../service/auth.service';
 import { UnauthorizedException } from '@nestjs/common';
 
 interface RequestWithRefreshTokenBody extends Request {
@@ -46,7 +46,7 @@ export class RefreshTokenStrategy extends PassportStrategy(
     }
 
     const cacheKey = `bl_${payload.sub}_${payload.jti}`;
-    const isBlacklisted = await this.authService['cacheManager'].get(cacheKey); // Accessing cacheManager
+    const isBlacklisted = await this.authService['cacheManager'].get(cacheKey);
 
     if (isBlacklisted) {
       throw new UnauthorizedException('Refresh token has been blacklisted.');

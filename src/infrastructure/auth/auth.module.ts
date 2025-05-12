@@ -6,9 +6,10 @@ import { RefreshTokenStrategy } from './strategy/refresh-token.strategy';
 import { AccessTokenGuard } from './guard/access-token.guard';
 import { RefreshTokenGuard } from './guard/refresh-token.guard';
 import { AuthService } from './service/auth.service';
+import { LoggerModule } from '../logger/logger.module';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({})],
+  imports: [PassportModule, JwtModule.register({}), LoggerModule],
   providers: [
     AuthService,
     AccessTokenStrategy,

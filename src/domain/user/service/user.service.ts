@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   NotFoundException,
+  Inject,
 } from '@nestjs/common';
 import {
   AuthService,
@@ -17,11 +18,13 @@ import {
   UserResponse,
 } from '../dto/user.dto';
 import { DatabaseService } from '../../../infrastructure/database/database.service';
-import { usersTable } from '../../../config/db/schema';
+import { User, usersTable } from '../../../config/db/schema';
 import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import { WinstonLogger } from '../../../infrastructure/logger/logger.service';
+import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
+import { envConfig } from '../../../config/env.config';
 
 @Injectable()
 export class UserService {
@@ -29,8 +32,14 @@ export class UserService {
     private readonly authService: AuthService,
     private readonly db: DatabaseService,
     private readonly logger: WinstonLogger,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
+  /**
+   * Creates a new user in the database.
+   *
+   * @param signUpDto
+   */
   async signUp(signUpDto: SignUpDto): Promise<Partial<UserResponse>> {
     const existingUser = await this.db.dbConfig.query.usersTable.findFirst({
       where: eq(usersTable.email, signUpDto.email),
@@ -76,6 +85,11 @@ export class UserService {
     return newUserArr[0];
   }
 
+  /**
+   * Signs in a user and generates access and refresh tokens.
+   *
+   * @param signInDto
+   */
   async signIn(signInDto: SignInDto): Promise<SignInResponse> {
     const user = await this.db.dbConfig.query.usersTable.findFirst({
       where: eq(usersTable.email, signInDto.email),
@@ -106,12 +120,16 @@ export class UserService {
       sub: user.id,
       name: user.name,
       email: user.email,
-      jti: uuidv4(),
     };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.authService.generateAccessToken(userPayload),
       this.authService.generateRefreshToken(userPayload),
+      this.cacheManager.set(
+        userPayload.sub,
+        JSON.stringify(user),
+        envConfig.ACCESS_TOKEN_EXPIRES_IN * 60 * 60,
+      ),
     ]);
 
     this.logger.log(`User ${signInDto.email} logged in`, 'UserService');
@@ -119,6 +137,11 @@ export class UserService {
     return { accessToken, refreshToken };
   }
 
+  /**
+   * Refreshes the access token for a user.
+   *
+   * @param userFromJwt
+   */
   async refreshToken(
     userFromJwt: UserJwtPayload,
   ): Promise<RefreshTokenResponse> {
@@ -139,7 +162,6 @@ export class UserService {
       sub: userFromJwt.sub,
       name: userFromJwt.name,
       email: userFromJwt.email,
-      jti: uuidv4(),
     };
 
     const accessToken = await this.authService.generateAccessToken(userPayload);
@@ -149,13 +171,24 @@ export class UserService {
     return { accessToken };
   }
 
+  /**
+   * Logs out a user by blacklisting the token and removing it from the cache.
+   *
+   * @param user
+   */
   async logout(user: UserJwtPayload): Promise<void> {
     if (user.jti) {
       this.logger.log(`User ${user.sub} logged out`, 'UserService');
 
-      const userExists = await this.db.dbConfig.query.usersTable.findFirst({
-        where: eq(usersTable.id, user.sub),
-      });
+      let userExists = (await this.cacheManager.get(user.sub)) as
+        | User
+        | undefined;
+
+      if (!userExists) {
+        userExists = await this.db.dbConfig.query.usersTable.findFirst({
+          where: eq(usersTable.id, user.sub),
+        });
+      }
 
       if (!userExists) {
         this.logger.error(
@@ -167,6 +200,7 @@ export class UserService {
       }
 
       await this.authService.blacklistTokenFromPayload(user);
+      await this.cacheManager.del(user.sub);
     } else {
       this.logger.error(
         `User ${user.sub} failed to log out`,
@@ -177,19 +211,30 @@ export class UserService {
     }
   }
 
+  /**
+   * Retrieves the profile of a user by their ID.
+   *
+   * @param userId
+   */
   async getUserProfile(userId: string): Promise<UserResponse> {
-    const user = await this.db.dbConfig.query.usersTable.findFirst({
-      where: eq(usersTable.id, userId),
-      columns: {
-        id: true,
-        name: true,
-        email: true,
-        createdAt: true,
-        updatedAt: true,
-        loginAt: true,
-        emailVerified: true,
-      },
-    });
+    let user = (await this.cacheManager.get(userId)) as
+      | Partial<User>
+      | undefined;
+
+    if (!user) {
+      user = await this.db.dbConfig.query.usersTable.findFirst({
+        where: eq(usersTable.id, userId),
+        columns: {
+          id: true,
+          name: true,
+          email: true,
+          createdAt: true,
+          updatedAt: true,
+          loginAt: true,
+          emailVerified: true,
+        },
+      });
+    }
 
     if (!user) {
       this.logger.error(
@@ -200,7 +245,7 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    this.logger.log(`User ${userId} profile retrieved`, 'UserService');
+    this.logger.log(`User ${user.email} profile retrieved`, 'UserService');
     return toUserResponse(user);
   }
 }
