@@ -8,6 +8,7 @@ import {
 import { UserJwtPayload } from '../../../infrastructure/jwt/service/jwt.service';
 import {
   ChangePasswordDto,
+  ForgotPasswordDto,
   RefreshTokenResponse,
   SetPasswordDto,
   SignInDto,
@@ -187,7 +188,7 @@ export class AuthService {
    *
    * @param user
    */
-  async logout(user: UserJwtPayload): Promise<void> {
+  async signOut(user: UserJwtPayload): Promise<void> {
     if (user.jti) {
       this.logger.log(`User ${user.sub} logged out`, 'UserService');
 
@@ -203,18 +204,18 @@ export class AuthService {
 
       if (!userExists) {
         this.logger.error(
-          `User with ID ${user.sub} not found for logout`,
-          new UnauthorizedException('User not found for logout').stack,
+          `User with ID ${user.sub} not found for signOut`,
+          new UnauthorizedException('User not found for signOut').stack,
           'UserService',
         );
-        throw new UnauthorizedException('User not found for logout');
+        throw new UnauthorizedException('User not found for signOut');
       }
 
       await this.jwtService.blacklistTokenFromPayload(user);
       await this.cacheManager.del(user.sub);
     } else {
       this.logger.error(
-        `User ${user.sub} failed to log out`,
+        `User ${user.sub} failed to signOut`,
         new UnauthorizedException('Invalid token').stack,
         'UserService',
       );
@@ -300,6 +301,7 @@ export class AuthService {
           updatedAt: new Date().toDateString(),
         })
         .where(eq(usersTable.email, email)),
+      this.cacheManager.del(`${email}_attempt`),
     ]);
 
     this.logger.log(`OTP verified for ${email}`, 'UserService');
@@ -428,6 +430,62 @@ export class AuthService {
       ),
     ]);
     this.logger.log(`Password updated for user ${userId}`, 'UserService');
+  }
+
+  /**
+   * Handles the forgot password process.
+   *
+   * @param data
+   */
+  async forgotPassword(data: ForgotPasswordDto): Promise<void> {
+    const user = await this.db.dbConfig.query.usersTable.findFirst({
+      where: eq(usersTable.email, data.email),
+    });
+
+    if (!user) {
+      this.logger.error(
+        `User with email ${data.email} not found`,
+        new NotFoundException('User not found').stack,
+        'UserService',
+      );
+      throw new NotFoundException('User not found');
+    }
+
+    const cachedOtp = (await this.cacheManager.get(data.email)) as string;
+    console.log(cachedOtp);
+
+    if (!cachedOtp) {
+      this.logger.error(
+        `OTP not found for ${data.email}`,
+        new NotFoundException('OTP not found').stack,
+        'UserService',
+      );
+      throw new NotFoundException('OTP not found');
+    }
+
+    if (cachedOtp !== data.otp) {
+      this.logger.error(
+        `Invalid OTP for ${data.email}`,
+        new UnauthorizedException('Invalid OTP').stack,
+        'UserService',
+      );
+      throw new UnauthorizedException('Invalid OTP');
+    }
+
+    const hashedPassword = await bcrypt.hash(data.new_password, 10);
+
+    await Promise.all([
+      this.db.dbConfig
+        .update(usersTable)
+        .set({
+          password: hashedPassword,
+          updatedAt: new Date().toDateString(),
+        })
+        .where(eq(usersTable.email, data.email)),
+      this.cacheManager.del(data.email),
+      this.cacheManager.del(`${data.email}_attempt`),
+    ]);
+    this.logger.log(`Password updated for ${data.email}`, 'UserService');
   }
 
   /**

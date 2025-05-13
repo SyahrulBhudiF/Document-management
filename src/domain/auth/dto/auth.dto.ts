@@ -91,6 +91,21 @@ export const ChangePasswordSchema = z.object({
 
 export type ChangePasswordDto = z.infer<typeof ChangePasswordSchema>;
 
+export const ForgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  new_password: z
+    .string()
+    .min(8)
+    .max(32)
+    .regex(/[A-Z]/, 'Must contain uppercase')
+    .regex(/[a-z]/, 'Must contain lowercase')
+    .regex(/[0-9]/, 'Must contain number')
+    .regex(/[!@#$%^&*()]/, 'Must contain special char'),
+  otp: z.string().min(1, 'OTP is required'),
+});
+
+export type ForgotPasswordDto = z.infer<typeof ForgotPasswordSchema>;
+
 export type UserResponse = {
   id: string;
   name: string;

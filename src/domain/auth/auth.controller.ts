@@ -22,6 +22,8 @@ import {
   SetPasswordDto,
   ChangePasswordSchema,
   ChangePasswordDto,
+  ForgotPasswordSchema,
+  ForgotPasswordDto,
 } from './dto/auth.dto';
 import { ZodValidationPipe } from '../../common/pipe/zod.pipe';
 import { AccessTokenGuard } from '../../infrastructure/jwt/guard/access-token.guard';
@@ -43,7 +45,7 @@ import { User } from '../../config/db/schema';
 export class AuthController {
   constructor(private readonly userService: AuthService) {}
 
-  @Post('signup')
+  @Post('sign-up')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Sign up a new user' })
   @ApiResponse({
@@ -87,7 +89,7 @@ export class AuthController {
     };
   }
 
-  @Post('signin')
+  @Post('sign-in')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Sign in an existing user' })
   @ApiResponse({
@@ -127,7 +129,7 @@ export class AuthController {
   }
 
   @UseGuards(AccessTokenGuard)
-  @Post('logout')
+  @Post('sign-out')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Log out the current user' })
   @ApiBearerAuth()
@@ -141,7 +143,7 @@ export class AuthController {
   })
   @ApiResponse({
     status: HttpStatus.FORBIDDEN,
-    description: 'User not found for logout',
+    description: 'User not found for signOut',
   })
   @ApiBody({
     schema: {
@@ -156,9 +158,9 @@ export class AuthController {
     },
   })
   async logout(@GetCurrentUser() user: UserJwtPayload) {
-    const result = await this.userService.logout(user);
+    const result = await this.userService.signOut(user);
     return {
-      message: 'User logged out successfully',
+      message: 'User signOut successfully',
       data: result,
     };
   }
@@ -424,6 +426,51 @@ export class AuthController {
     await this.userService.changePassword(data, userId);
     return {
       message: 'Password changed successfully',
+    };
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Forgot password with otp' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Password reset link sent successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'Email not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'Email not verified',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', format: 'email' },
+        new_password: {
+          type: 'string',
+          minLength: 8,
+          maxLength: 32,
+          pattern: '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()]).{8,32}',
+        },
+        otp: { type: 'string' },
+      },
+      example: {
+        email: 'john@gmail.com',
+        new_password: 'Password123!',
+        otp: '123456',
+      },
+      required: ['email', 'new_password', 'otp'],
+    },
+  })
+  async forgotPassword(
+    @Body(new ZodValidationPipe(ForgotPasswordSchema)) data: ForgotPasswordDto,
+  ) {
+    await this.userService.forgotPassword(data);
+    return {
+      message: 'Password successfully changed',
     };
   }
 
