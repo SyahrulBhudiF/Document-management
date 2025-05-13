@@ -304,6 +304,28 @@ export class AuthService {
   }
 
   /**
+   * Handles the Google OAuth callback and generates access and refresh tokens.
+   *
+   * @param user
+   */
+  async googleCallback(user: User): Promise<SignInResponse> {
+    const userPayload: UserJwtPayload = {
+      sub: user.id,
+      name: user.name,
+      email: user.email,
+    };
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwtService.generateAccessToken(userPayload),
+      this.jwtService.generateRefreshToken(userPayload),
+    ]);
+
+    this.logger.log(`User ${user.email} logged in with google`, 'UserService');
+
+    return { accessToken, refreshToken };
+  }
+
+  /**
    * Retrieves the profile of a user by their ID.
    *
    * @param userId

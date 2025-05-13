@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import { AuthService } from './service/auth.service';
 import {
@@ -30,6 +31,8 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { GoogleAuthGuard } from '../../infrastructure/google/guard/google.guard';
+import { User } from '../../config/db/schema';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -259,6 +262,51 @@ export class AuthController {
     await this.userService.verifyOtp(data.email, data.otp);
     return {
       message: 'OTP verified successfully',
+    };
+  }
+
+  @UseGuards(GoogleAuthGuard)
+  @Get('google')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Google authentication (Open it at browser not at documentation)',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Redirecting to Google authentication',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid credentials',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Email not verified',
+  })
+  async google() {}
+
+  @UseGuards(GoogleAuthGuard)
+  @Get('google/callback')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Google authentication callback' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'User signed in successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid credentials',
+  })
+  async googleCallback(@Req() req: { user: User }) {
+    const { accessToken, refreshToken } = await this.userService.googleCallback(
+      req.user,
+    );
+    return {
+      message: 'User signed in successfully',
+      data: {
+        accessToken,
+        refreshToken,
+      },
     };
   }
 
