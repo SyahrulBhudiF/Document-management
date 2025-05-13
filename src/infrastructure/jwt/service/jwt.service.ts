@@ -1,8 +1,9 @@
 import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { Inject, Injectable } from '@nestjs/common';
+import { JwtService as JWT } from '@nestjs/jwt';
 import { envConfig } from '../../../config/env.config';
 import { v4 as uuidv4 } from 'uuid';
+import { WinstonLogger } from '../../logger/logger.service';
 
 export interface UserJwtPayload {
   sub: string;
@@ -12,28 +13,50 @@ export interface UserJwtPayload {
 }
 
 @Injectable()
-export class AuthService {
+export class JwtService {
   constructor(
-    private readonly jwtService: JwtService,
+    private readonly jwtService: JWT,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly logger: WinstonLogger,
   ) {}
 
+  /**
+   * Generates an access token for the user.
+   *
+   * @param userInfo - The user information to include in the token payload.
+   */
   async generateAccessToken(
     userInfo: Omit<UserJwtPayload, 'jti'>,
   ): Promise<string> {
     const jti = uuidv4();
     const payloadWithJti: UserJwtPayload = { ...userInfo, jti };
+
+    this.logger.log(
+      `Generated access token for user ${userInfo.email}`,
+      'AuthService',
+    );
+
     return this.jwtService.signAsync(payloadWithJti, {
       secret: envConfig.JWT_ACCESS_SECRET,
       expiresIn: `${envConfig.ACCESS_TOKEN_EXPIRES_IN}h`,
     });
   }
 
+  /**
+   * Generates a refresh token for the user.
+   *
+   * @param userInfo - The user information to include in the token payload.
+   */
   async generateRefreshToken(
     userInfo: Omit<UserJwtPayload, 'jti'>,
   ): Promise<string> {
     const jti = uuidv4();
     const payloadWithJti: UserJwtPayload = { ...userInfo, jti };
+
+    this.logger.log(
+      `Generated refresh token for user ${userInfo.email}`,
+      'AuthService',
+    );
 
     return await this.jwtService.signAsync(payloadWithJti, {
       secret: envConfig.JWT_REFRESH_SECRET,
@@ -41,36 +64,16 @@ export class AuthService {
     });
   }
 
-  async verifyTokenAndCheckBlacklist(
-    token: string,
-    secret: string,
-  ): Promise<UserJwtPayload> {
-    try {
-      const payload = await this.jwtService.verifyAsync<UserJwtPayload>(token, {
-        secret: secret,
-      });
-
-      const isBlacklisted = await this.cacheManager.get(
-        `bl_${payload.sub}_${payload.jti}`,
-      );
-
-      if (isBlacklisted) {
-        throw new UnauthorizedException('Token is blacklisted');
-      }
-
-      return payload;
-    } catch (error: any) {
-      if (error instanceof Error) {
-        throw new UnauthorizedException(error.message);
-      }
-      throw new UnauthorizedException('Invalid token or unknown error');
-    }
-  }
-
+  /**
+   * Verifies the access token and returns the payload.
+   *
+   * @param payload
+   */
   async blacklistTokenFromPayload(payload: UserJwtPayload): Promise<void> {
     if (!payload.jti) {
-      console.warn(
-        'Attempted to blacklist token without JTI. Consider adding JTI to JWTs for effective blacklisting.',
+      this.logger.error(
+        'Token is missing JTI and cannot be reliably checked against blacklist.',
+        'AuthService',
       );
       return;
     }
@@ -82,6 +85,6 @@ export class AuthService {
     );
 
     await this.cacheManager.set(key, true, maxTokenLifeInSeconds * 1000);
-    console.log(`Token blacklisted: ${key}`);
+    this.logger.log(`Blacklisted token for user ${payload.sub}`, 'AuthService');
   }
 }

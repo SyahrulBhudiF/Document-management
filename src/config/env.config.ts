@@ -1,4 +1,24 @@
-export const envConfig = {
+interface EnvConfig {
+  DATABASE_URL: string;
+  PORT: number;
+  MAIL_SERVICE: string;
+  MAIL_HOST: string;
+  MAIL_PORT: number;
+  MAIL_USERNAME: string;
+  MAIL_PASSWORD: string;
+  EMAIL_USER: string;
+  JWT_ACCESS_SECRET: string;
+  JWT_REFRESH_SECRET: string;
+  ACCESS_TOKEN_EXPIRES_IN: number;
+  REFRESH_TOKEN_EXPIRES_IN: number;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  GOOGLE_REDIRECT_URI: string;
+  REDIS_HOST: string;
+  REDIS_PORT: number;
+}
+
+export const envConfig: EnvConfig = {
   // Database
   DATABASE_URL: process.env.DATABASE_URL as string,
 
@@ -22,4 +42,8 @@ export const envConfig = {
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID as string,
   GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET as string,
   GOOGLE_REDIRECT_URI: process.env.GOOGLE_REDIRECT_URI as string,
+
+  // Redis Configuration
+  REDIS_HOST: process.env.REDIS_HOST as string,
+  REDIS_PORT: Number(process.env.REDIS_PORT) || 6379,
 };
