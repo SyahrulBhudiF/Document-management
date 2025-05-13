@@ -20,6 +20,8 @@ import {
   VerifyOtpDto,
   SetPasswordSchema,
   SetPasswordDto,
+  ChangePasswordSchema,
+  ChangePasswordDto,
 } from './dto/auth.dto';
 import { ZodValidationPipe } from '../../common/pipe/zod.pipe';
 import { AccessTokenGuard } from '../../infrastructure/jwt/guard/access-token.guard';
@@ -363,6 +365,65 @@ export class AuthController {
     await this.userService.setPassword(data);
     return {
       message: 'Password set successfully',
+    };
+  }
+
+  @UseGuards(AccessTokenGuard)
+  @Post('change-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change password for the current user' })
+  @ApiBearerAuth()
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Password changed successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid old password',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'User not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'User does not have a password',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        old_password: {
+          type: 'string',
+          minLength: 8,
+          maxLength: 32,
+          pattern: '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()]).{8,32}',
+        },
+        new_password: {
+          type: 'string',
+          minLength: 8,
+          maxLength: 32,
+          pattern: '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()]).{8,32}',
+        },
+      },
+      example: {
+        old_password: 'Password123!',
+        new_password: 'NewPassword123!',
+      },
+      required: ['old_password', 'new_password'],
+    },
+  })
+  async changePassword(
+    @Body(new ZodValidationPipe(ChangePasswordSchema)) data: ChangePasswordDto,
+    @GetCurrentUser('sub') userId: string,
+  ) {
+    await this.userService.changePassword(data, userId);
+    return {
+      message: 'Password changed successfully',
     };
   }
 

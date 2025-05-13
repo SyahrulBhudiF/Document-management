@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { UserJwtPayload } from '../../../infrastructure/jwt/service/jwt.service';
 import {
+  ChangePasswordDto,
   RefreshTokenResponse,
   SetPasswordDto,
   SignInDto,
@@ -326,6 +327,11 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
+  /**
+   * Sets a password for a user who logged in with Google.
+   *
+   * @param data
+   */
   async setPassword(data: SetPasswordDto): Promise<void> {
     const user = await this.db.dbConfig.query.usersTable.findFirst({
       where: eq(usersTable.email, data.email),
@@ -360,6 +366,68 @@ export class AuthService {
       .where(eq(usersTable.id, user.id));
 
     this.logger.log(`Password updated for ${data.email}`, 'UserService');
+  }
+
+  /**
+   * Changes the password for a user.
+   *
+   * @param data
+   * @param userId
+   */
+  async changePassword(data: ChangePasswordDto, userId: string): Promise<void> {
+    let user = (await this.cacheManager.get(userId)) as User | undefined;
+
+    if (!user) {
+      user = await this.db.dbConfig.query.usersTable.findFirst({
+        where: eq(usersTable.id, userId),
+      });
+    }
+
+    if (!user) {
+      this.logger.error(
+        `User with ID ${userId} not found`,
+        new NotFoundException('User not found').stack,
+        'UserService',
+      );
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.password) {
+      this.logger.error(
+        `User with ID ${userId} does not have a password`,
+        new ConflictException('User does not have a password').stack,
+        'UserService',
+      );
+      throw new ConflictException('User does not have a password');
+    }
+
+    if (!(await bcrypt.compare(data.old_password, user.password))) {
+      this.logger.error(
+        `Invalid old password for user ${userId}`,
+        new UnauthorizedException('Invalid old password').stack,
+        'UserService',
+      );
+      throw new UnauthorizedException('Invalid old password');
+    }
+
+    const hashedPassword = await bcrypt.hash(data.new_password, 10);
+
+    await Promise.all([
+      this.db.dbConfig
+        .update(usersTable)
+        .set({
+          password: hashedPassword,
+          updatedAt: new Date().toDateString(),
+        })
+        .where(eq(usersTable.id, userId)),
+      this.cacheManager.del(userId),
+      this.cacheManager.set(
+        userId,
+        JSON.stringify({ ...user, password: hashedPassword }),
+        envConfig.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 1000,
+      ),
+    ]);
+    this.logger.log(`Password updated for user ${userId}`, 'UserService');
   }
 
   /**

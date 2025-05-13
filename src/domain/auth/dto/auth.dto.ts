@@ -70,6 +70,27 @@ export const SetPasswordSchema = z.object({
 
 export type SetPasswordDto = z.infer<typeof SetPasswordSchema>;
 
+export const ChangePasswordSchema = z.object({
+  old_password: z
+    .string()
+    .min(8)
+    .max(32)
+    .regex(/[A-Z]/, 'Must contain uppercase')
+    .regex(/[a-z]/, 'Must contain lowercase')
+    .regex(/[0-9]/, 'Must contain number')
+    .regex(/[!@#$%^&*()]/, 'Must contain special char'),
+  new_password: z
+    .string()
+    .min(8)
+    .max(32)
+    .regex(/[A-Z]/, 'Must contain uppercase')
+    .regex(/[a-z]/, 'Must contain lowercase')
+    .regex(/[0-9]/, 'Must contain number')
+    .regex(/[!@#$%^&*()]/, 'Must contain special char'),
+});
+
+export type ChangePasswordDto = z.infer<typeof ChangePasswordSchema>;
+
 export type UserResponse = {
   id: string;
   name: string;
