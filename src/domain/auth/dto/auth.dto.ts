@@ -56,6 +56,20 @@ export const VerifyOtpSchema = z.object({
 
 export type VerifyOtpDto = z.infer<typeof VerifyOtpSchema>;
 
+export const SetPasswordSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  new_password: z
+    .string()
+    .min(8)
+    .max(32)
+    .regex(/[A-Z]/, 'Must contain uppercase')
+    .regex(/[a-z]/, 'Must contain lowercase')
+    .regex(/[0-9]/, 'Must contain number')
+    .regex(/[!@#$%^&*()]/, 'Must contain special char'),
+});
+
+export type SetPasswordDto = z.infer<typeof SetPasswordSchema>;
+
 export type UserResponse = {
   id: string;
   name: string;

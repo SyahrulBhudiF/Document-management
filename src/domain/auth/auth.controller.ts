@@ -18,6 +18,8 @@ import {
   SendEmailDto,
   VerifyOtpSchema,
   VerifyOtpDto,
+  SetPasswordSchema,
+  SetPasswordDto,
 } from './dto/auth.dto';
 import { ZodValidationPipe } from '../../common/pipe/zod.pipe';
 import { AccessTokenGuard } from '../../infrastructure/jwt/guard/access-token.guard';
@@ -57,7 +59,12 @@ export class AuthController {
         name: { type: 'string', minLength: 2, maxLength: 50 },
         email: { type: 'string', format: 'email' },
         password: { type: 'string', minLength: 8, maxLength: 32 },
-        password_confirmation: { type: 'string', minLength: 8, maxLength: 32 },
+        password_confirmation: {
+          type: 'string',
+          minLength: 8,
+          maxLength: 32,
+          pattern: '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()]).{8,32}',
+        },
       },
       example: {
         name: 'John Doe',
@@ -307,6 +314,55 @@ export class AuthController {
         accessToken,
         refreshToken,
       },
+    };
+  }
+
+  @UseGuards(AccessTokenGuard)
+  @Post('set-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set password for the user are login with google' })
+  @ApiBearerAuth()
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Password set successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'User not found',
+  })
+  @ApiResponse({
+    status: HttpStatus.CONFLICT,
+    description: 'Password already set',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', format: 'email' },
+        new_password: {
+          type: 'string',
+          minLength: 8,
+          maxLength: 32,
+          pattern: '(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()]).{8,32}',
+        },
+      },
+      example: {
+        email: 'jhon@gmail.com',
+        new_password: 'Password123!',
+      },
+      required: ['email', 'new_password'],
+    },
+  })
+  async setPassword(
+    @Body(new ZodValidationPipe(SetPasswordSchema)) data: SetPasswordDto,
+  ) {
+    await this.userService.setPassword(data);
+    return {
+      message: 'Password set successfully',
     };
   }
 

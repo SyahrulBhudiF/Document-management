@@ -8,6 +8,7 @@ import {
 import { UserJwtPayload } from '../../../infrastructure/jwt/service/jwt.service';
 import {
   RefreshTokenResponse,
+  SetPasswordDto,
   SignInDto,
   SignInResponse,
   SignUpDto,
@@ -323,6 +324,42 @@ export class AuthService {
     this.logger.log(`User ${user.email} logged in with google`, 'UserService');
 
     return { accessToken, refreshToken };
+  }
+
+  async setPassword(data: SetPasswordDto): Promise<void> {
+    const user = await this.db.dbConfig.query.usersTable.findFirst({
+      where: eq(usersTable.email, data.email),
+    });
+
+    if (!user) {
+      this.logger.error(
+        `User with email ${data.email} not found`,
+        new NotFoundException('User not found').stack,
+        'UserService',
+      );
+      throw new NotFoundException('User not found');
+    }
+
+    if (user.password) {
+      this.logger.error(
+        `User with email ${data.email} already has a password`,
+        new ConflictException('User already has a password').stack,
+        'UserService',
+      );
+      throw new ConflictException('User already has a password');
+    }
+
+    const hashedPassword = await bcrypt.hash(data.new_password, 10);
+
+    await this.db.dbConfig
+      .update(usersTable)
+      .set({
+        password: hashedPassword,
+        updatedAt: new Date().toDateString(),
+      })
+      .where(eq(usersTable.id, user.id));
+
+    this.logger.log(`Password updated for ${data.email}`, 'UserService');
   }
 
   /**
