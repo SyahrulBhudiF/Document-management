@@ -22,12 +22,13 @@ export class UserUtilService {
    * @param userId
    */
   async findUserById(userId: string): Promise<User> {
-    let user = (await this.cacheManager.get(userId)) as User | undefined;
+    let user = await this.cacheManager.get(userId);
 
     if (!user) {
       user = await this.db.dbConfig.query.usersTable.findFirst({
         where: eq(usersTable.id, userId),
       });
+      console.log(user);
 
       if (!user) {
         this.logger.error(
@@ -43,8 +44,10 @@ export class UserUtilService {
         JSON.stringify(user),
         envConfig.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 1000,
       );
+    } else {
+      user = JSON.parse(user as string) as User;
     }
 
-    return user;
+    return user as User;
   }
 }

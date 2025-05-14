@@ -4,7 +4,8 @@ import {
   NotFoundException,
   StreamableFile,
 } from '@nestjs/common';
-import { Express } from 'express'; // Import Express types for Multer File
+import { existsSync, promises as fs } from 'fs';
+import * as path from 'path';
 import { User, usersTable } from '../../../config/db/schema';
 import { eq } from 'drizzle-orm';
 import { DatabaseService } from '../../../infrastructure/database/database.service';
@@ -81,6 +82,11 @@ export class UserService {
     let filePath = '';
     if (profilePicture) {
       filePath = `uploads/profile/${profilePicture.filename}`;
+      const absolutePath = path.resolve(user.profilePicture!);
+      if (existsSync(absolutePath)) {
+        await fs.unlink(absolutePath);
+        this.logger.log('Old Profile deleted successfully', 'UserService');
+      }
     }
 
     const updatedUser = {
@@ -95,12 +101,14 @@ export class UserService {
       .where(eq(usersTable.id, userId))
       .returning();
 
-    this.logger.log(`User ${user.email} profile updated`, 'UserService');
-    await this.cacheManager.set(
-      userId,
-      JSON.stringify(updated[0]),
-      envConfig.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 1000,
-    );
+    this.logger.log(`User ${updated[0].email} profile updated`, 'UserService');
+    if (updated && updated[0]) {
+      await this.cacheManager.set(
+        userId,
+        JSON.stringify(updated[0]),
+        envConfig.ACCESS_TOKEN_EXPIRES_IN * 60 * 60 * 1000,
+      );
+    }
 
     return toUserResponse(updated[0]);
   }

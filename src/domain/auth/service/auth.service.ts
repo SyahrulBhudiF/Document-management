@@ -191,28 +191,12 @@ export class AuthService {
   async signOut(user: UserJwtPayload): Promise<void> {
     if (user.jti) {
       this.logger.log(`User ${user.sub} logged out`, 'UserService');
+      await this.util.findUserById(user.sub);
 
-      let userExists = (await this.cacheManager.get(user.sub)) as
-        | User
-        | undefined;
-
-      if (!userExists) {
-        userExists = await this.db.dbConfig.query.usersTable.findFirst({
-          where: eq(usersTable.id, user.sub),
-        });
-      }
-
-      if (!userExists) {
-        this.logger.error(
-          `User with ID ${user.sub} not found for signOut`,
-          new UnauthorizedException('User not found for signOut').stack,
-          'UserService',
-        );
-        throw new UnauthorizedException('User not found for signOut');
-      }
-
-      await this.jwtService.blacklistTokenFromPayload(user);
-      await this.cacheManager.del(user.sub);
+      await Promise.all([
+        this.jwtService.blacklistTokenFromPayload(user),
+        this.cacheManager.del(user.sub),
+      ]);
     } else {
       this.logger.error(
         `User ${user.sub} failed to signOut`,
