@@ -15,10 +15,15 @@ import { UserResponse, toUserResponse, UpdateUserDto } from '../dto/user.dto';
 import { envConfig } from '../../../config/env.config';
 import { createReadStream } from 'fs';
 import { UserUtilService } from '../../../common/util/user/user.service';
+import {
+  JwtService,
+  UserJwtPayload,
+} from '../../../infrastructure/jwt/service/jwt.service';
 
 @Injectable()
 export class UserService {
   constructor(
+    private readonly jwtService: JwtService,
     private readonly db: DatabaseService,
     private readonly logger: WinstonLogger,
     private readonly util: UserUtilService,
@@ -82,10 +87,12 @@ export class UserService {
     let filePath = '';
     if (profilePicture) {
       filePath = `uploads/profile/${profilePicture.filename}`;
-      const absolutePath = path.resolve(user.profilePicture!);
-      if (existsSync(absolutePath)) {
-        await fs.unlink(absolutePath);
-        this.logger.log('Old Profile deleted successfully', 'UserService');
+      if (user.profilePicture) {
+        const absolutePath = path.resolve(user.profilePicture);
+        if (existsSync(absolutePath)) {
+          await fs.unlink(absolutePath);
+          this.logger.log('Old Profile deleted successfully', 'UserService');
+        }
       }
     }
 
@@ -132,5 +139,29 @@ export class UserService {
 
     const file = createReadStream(user.profilePicture);
     return new StreamableFile(file);
+  }
+
+  /**
+   * Deletes a user by their ID.
+   *
+   * @param data
+   */
+  async deleteUser(data: UserJwtPayload): Promise<void> {
+    const user = await this.util.findUserById(data.sub);
+
+    if (user.profilePicture) {
+      const absolutePath = path.resolve(user.profilePicture);
+      if (existsSync(absolutePath)) {
+        await fs.unlink(absolutePath);
+        this.logger.log('Profile deleted successfully', 'UserService');
+      }
+    }
+
+    await Promise.all([
+      this.db.dbConfig.delete(usersTable).where(eq(usersTable.id, user.id)),
+      this.cacheManager.del(user.id),
+      this.jwtService.blacklistTokenFromPayload(data),
+    ]);
+    this.logger.log(`User ${user.email} deleted`, 'UserService');
   }
 }

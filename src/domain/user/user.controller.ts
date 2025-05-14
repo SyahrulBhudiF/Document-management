@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -21,7 +22,8 @@ import { UserService } from './service/user.service';
 import { AccessTokenGuard } from '../../infrastructure/jwt/guard/access-token.guard';
 import { GetCurrentUser } from '../../common/decorator/custom.decorator';
 import { UpdateUserDto } from './dto/user.dto';
-import { ProfileUploadInterceptor } from '../../common/interceptor/implementation/profile-upload.interceptor'; // Import the specific interceptor
+import { ProfileUploadInterceptor } from '../../common/interceptor/implementation/profile-upload.interceptor';
+import { UserJwtPayload } from '../../infrastructure/jwt/service/jwt.service'; // Import the specific interceptor
 
 @ApiTags('User')
 @Controller('user')
@@ -119,5 +121,29 @@ export class UserController {
   })
   async getProfilePicture(@GetCurrentUser('sub') userId: string) {
     return await this.userService.getProfilePicture(userId);
+  }
+
+  @UseGuards(AccessTokenGuard)
+  @Delete('/')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete the current user profile' })
+  @ApiBearerAuth()
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'User profile deleted successfully',
+  })
+  @ApiResponse({
+    status: HttpStatus.UNAUTHORIZED,
+    description: 'Invalid token',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'User not found',
+  })
+  async deleteUser(@GetCurrentUser() user: UserJwtPayload) {
+    await this.userService.deleteUser(user);
+    return {
+      message: 'User profile deleted successfully',
+    };
   }
 }
