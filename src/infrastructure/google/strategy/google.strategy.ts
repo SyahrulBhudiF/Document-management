@@ -24,7 +24,6 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     done: VerifyCallback,
   ): Promise<void> {
     try {
-      console.log('Google Profile:', JSON.stringify(profile, null, 2));
       const { name, emails, photos, id } = profile;
 
       if (!emails?.[0]?.value || !name?.givenName || !photos?.[0]?.value) {

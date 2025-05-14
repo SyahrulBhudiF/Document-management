@@ -6,10 +6,18 @@ import { LoggerModule } from '../../infrastructure/logger/logger.module';
 import { MailModule } from '../../infrastructure/mail/mail.module';
 import { GoogleModule } from '../../infrastructure/google/google.module';
 import { JwtModule } from '../../infrastructure/jwt/jwt.module';
+import { UserModule } from '../../common/util/user/user.module';
 
 @Module({
   controllers: [AuthController],
   providers: [AuthService],
-  imports: [DatabaseModule, LoggerModule, JwtModule, MailModule, GoogleModule],
+  imports: [
+    DatabaseModule,
+    LoggerModule,
+    JwtModule,
+    MailModule,
+    GoogleModule,
+    UserModule,
+  ],
 })
 export class AuthModule {}

@@ -9,13 +9,13 @@ export const usersTable = pgTable('users', {
   name: varchar({ length: 100 }).notNull(),
   email: varchar({ length: 100 }).notNull().unique(),
   password: varchar({ length: 255 }).default(sql`NULL`),
+  profilePicture: varchar({ length: 255 }).default(sql`NULL`),
   emailVerified: timestamp().default(sql`NULL`),
   loginAt: timestamp().default(sql`NULL`),
   createdAt: date().default(sql`now
     ()`),
   updatedAt: date().default(sql`now
     ()`),
-  deletedAt: date().default(sql`NULL`),
 });
 
 export type User = typeof usersTable.$inferSelect;
