@@ -14,8 +14,6 @@ import {
   SignInDto,
   SignInResponse,
   SignUpDto,
-  toUserResponse,
-  UserResponse,
 } from '../dto/auth.dto';
 import { DatabaseService } from '../../../infrastructure/database/database.service';
 import { User, usersTable } from '../../../config/db/schema';
@@ -27,6 +25,7 @@ import { Cache, CACHE_MANAGER } from '@nestjs/cache-manager';
 import { envConfig } from '../../../config/env.config';
 import { MailService } from '../../../infrastructure/mail/mail.service';
 import { JwtService } from '../../../infrastructure/jwt/service/jwt.service';
+import { UserUtilService } from '../../../common/util/user/user.service';
 
 @Injectable()
 export class AuthService {
@@ -35,6 +34,7 @@ export class AuthService {
     private readonly emailService: MailService,
     private readonly db: DatabaseService,
     private readonly logger: WinstonLogger,
+    private readonly util: UserUtilService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
@@ -43,7 +43,7 @@ export class AuthService {
    *
    * @param signUpDto
    */
-  async signUp(signUpDto: SignUpDto): Promise<Partial<UserResponse>> {
+  async signUp(signUpDto: SignUpDto): Promise<Partial<User>> {
     const existingUser = await this.db.dbConfig.query.usersTable.findFirst({
       where: eq(usersTable.email, signUpDto.email),
     });
@@ -271,7 +271,7 @@ export class AuthService {
    * @param email
    * @param otp
    */
-  async verifyOtp(email: string, otp: string): Promise<void> {
+  async verifyEmail(email: string, otp: string): Promise<void> {
     const cachedOtp = (await this.cacheManager.get(email)) as string;
 
     if (!cachedOtp) {
@@ -377,22 +377,7 @@ export class AuthService {
    * @param userId
    */
   async changePassword(data: ChangePasswordDto, userId: string): Promise<void> {
-    let user = (await this.cacheManager.get(userId)) as User | undefined;
-
-    if (!user) {
-      user = await this.db.dbConfig.query.usersTable.findFirst({
-        where: eq(usersTable.id, userId),
-      });
-    }
-
-    if (!user) {
-      this.logger.error(
-        `User with ID ${userId} not found`,
-        new NotFoundException('User not found').stack,
-        'UserService',
-      );
-      throw new NotFoundException('User not found');
-    }
+    const user = await this.util.findUserById(userId);
 
     if (!user.password) {
       this.logger.error(
@@ -486,45 +471,5 @@ export class AuthService {
       this.cacheManager.del(`${data.email}_attempt`),
     ]);
     this.logger.log(`Password updated for ${data.email}`, 'UserService');
-  }
-
-  /**
-   * Retrieves the profile of a user by their ID.
-   *
-   * @param userId
-   */
-  async getUserProfile(userId: string): Promise<UserResponse> {
-    let user: string | Partial<User> | undefined = (await this.cacheManager.get(
-      userId,
-    )) as string;
-
-    if (!user) {
-      user = await this.db.dbConfig.query.usersTable.findFirst({
-        where: eq(usersTable.id, userId),
-        columns: {
-          id: true,
-          name: true,
-          email: true,
-          createdAt: true,
-          updatedAt: true,
-          loginAt: true,
-          emailVerified: true,
-        },
-      });
-    } else {
-      user = JSON.parse(user) as Partial<User>;
-    }
-
-    if (!user) {
-      this.logger.error(
-        `User with ID ${userId} not found`,
-        new NotFoundException('User not found').stack,
-        'UserService',
-      );
-      throw new NotFoundException('User not found');
-    }
-
-    this.logger.log(`User ${user.email} profile retrieved`, 'UserService');
-    return toUserResponse(user);
   }
 }

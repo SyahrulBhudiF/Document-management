@@ -106,16 +106,6 @@ export const ForgotPasswordSchema = z.object({
 
 export type ForgotPasswordDto = z.infer<typeof ForgotPasswordSchema>;
 
-export type UserResponse = {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: string;
-  updatedAt: string;
-  loginAt?: Date | null;
-  emailVerified?: Date | null;
-};
-
 export type SignInResponse = {
   accessToken: string;
   refreshToken: string;
@@ -123,16 +113,4 @@ export type SignInResponse = {
 
 export type RefreshTokenResponse = {
   accessToken: string;
-};
-
-export const toUserResponse = (user: Partial<User>): UserResponse => {
-  return {
-    id: user.id!,
-    name: user.name!,
-    email: user.email!,
-    createdAt: user.createdAt!,
-    updatedAt: user.updatedAt!,
-    loginAt: user.loginAt,
-    emailVerified: user.emailVerified,
-  };
 };

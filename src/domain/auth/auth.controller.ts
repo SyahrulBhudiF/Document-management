@@ -238,9 +238,9 @@ export class AuthController {
     };
   }
 
-  @Post('verify-otp')
+  @Post('verify-email')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Verify OTP' })
+  @ApiOperation({ summary: 'Verify Email' })
   @ApiResponse({
     status: HttpStatus.OK,
     description: 'OTP verified successfully',
@@ -270,7 +270,7 @@ export class AuthController {
   async verifyOtp(
     @Body(new ZodValidationPipe(VerifyOtpSchema)) data: VerifyOtpDto,
   ) {
-    await this.userService.verifyOtp(data.email, data.otp);
+    await this.userService.verifyEmail(data.email, data.otp);
     return {
       message: 'OTP verified successfully',
     };
@@ -471,31 +471,6 @@ export class AuthController {
     await this.userService.forgotPassword(data);
     return {
       message: 'Password successfully changed',
-    };
-  }
-
-  @UseGuards(AccessTokenGuard)
-  @Get('profile')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get the current user profile' })
-  @ApiBearerAuth()
-  @ApiResponse({
-    status: HttpStatus.OK,
-    description: 'User profile retrieved successfully',
-  })
-  @ApiResponse({
-    status: HttpStatus.UNAUTHORIZED,
-    description: 'Invalid token',
-  })
-  @ApiResponse({
-    status: HttpStatus.NOT_FOUND,
-    description: 'User not found',
-  })
-  async getProfile(@GetCurrentUser('sub') userId: string) {
-    const result = await this.userService.getUserProfile(userId);
-    return {
-      message: 'User profile retrieved successfully',
-      data: result,
     };
   }
 }

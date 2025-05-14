@@ -35,6 +35,7 @@ export class GoogleService {
       name: `${user.firstName} ${user.lastName}`,
       emailVerified: new Date(),
       loginAt: new Date(),
+      picture: user.picture,
     };
 
     const result = await this.db.dbConfig
@@ -46,6 +47,7 @@ export class GoogleService {
           name: newUser.name,
           emailVerified: newUser.emailVerified,
           loginAt: newUser.loginAt,
+          profilePicture: newUser.picture,
         },
       })
       .returning();
